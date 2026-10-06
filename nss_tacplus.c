@@ -291,6 +291,7 @@ static int nss_tacplus_config(int *errnop, const char *cfile, int top)
                 struct addrinfo hints, *servers, *server;
                 int rv;
                 char *port, server_buf[sizeof lbuf];
+                char *close_bracket, *server_name;
 
                 memset(&hints, 0, sizeof hints);
                 hints.ai_family = AF_UNSPEC;  /* use IPv4 or IPv6, whichever */
@@ -298,12 +299,22 @@ static int nss_tacplus_config(int *errnop, const char *cfile, int top)
 
                 strcpy(server_buf, lbuf + 7);
 
-                port = strchr(server_buf, ':');
+                /* bracketed [IPv6]:port, otherwise host:port */
+                if(*server_buf == '[' &&
+                   (close_bracket = strchr(server_buf, ']')) != NULL) {
+                    server_name = server_buf + 1;
+                    *close_bracket = '\0';
+                    port = strchr(close_bracket + 1, ':');
+                }
+                else {
+                    server_name = server_buf;
+                    port = strchr(server_buf, ':');
+                }
                 if(port != NULL) {
                     *port = '\0';
                     port++;
                 }
-                if((rv = getaddrinfo(server_buf, (port == NULL) ?
+                if((rv = getaddrinfo(server_name, (port == NULL) ?
                             "49" : port, &hints, &servers)) == 0) {
                     for(server = servers; server != NULL &&
                         tac_srv_no < TAC_PLUS_MAXSERVERS;
@@ -319,7 +330,7 @@ static int nss_tacplus_config(int *errnop, const char *cfile, int top)
                 else {
                     syslog(LOG_ERR,
                         "%s: skip invalid server: %s (getaddrinfo: %s)",
-                        nssname, server_buf, gai_strerror(rv));
+                        nssname, server_name, gai_strerror(rv));
                 }
             }
             else {
